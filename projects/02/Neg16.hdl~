@@ -1,0 +1,17 @@
+
+/**
+ * Neg16 gate:
+ * out[16] = negative in[16]
+ */
+
+CHIP Neg16 {
+    IN in[16];
+    OUT out[16];
+
+    PARTS:
+    // Put your code here:
+    Not16(in=in ,back=out);
+    Inc16(in=back ,out=out);
+
+
+}

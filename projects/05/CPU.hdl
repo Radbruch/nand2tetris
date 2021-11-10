@@ -1,0 +1,94 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/05/CPU.hdl
+
+/**
+ * The Hack CPU (Central Processing unit), consisting of an ALU,
+ * two registers named A and D, and a program counter named PC.
+ * The CPU is designed to fetch and execute instructions written in 
+ * the Hack machine language. In particular, functions as follows:
+ * Executes the inputted instruction according to the Hack machine 
+ * language specification. The D and A in the language specification
+ * refer to CPU-resident registers, while M refers to the external
+ * memory location addressed by A, i.e. to Memory[A]. The inM input 
+ * holds the value of this location. If the current instruction needs 
+ * to write a value to M, the value is placed in outM, the address 
+ * of the target location is placed in the addressM output, and the 
+ * writeM control bit is asserted. (When writeM==0, any value may 
+ * appear in outM). The outM and writeM outputs are combinational: 
+ * they are affected instantaneously by the execution of the current 
+ * instruction. The addressM and pc outputs are clocked: although they 
+ * are affected by the execution of the current instruction, they commit 
+ * to their new values only in the next time step. If reset==1 then the 
+ * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather 
+ * than to the address resulting from executing the current instruction. 
+ */
+
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    // Put your code here:
+    
+    // If (C-instruction & dest1==1), ALUoutput goto A-register; 
+    // otherwise instruction goto A-register.
+    And(a=instruction[15], b=instruction[5] ,out=loadofMux16a);
+    Mux16(a=instruction ,b=ALUoutput ,sel=loadofMux16a ,out=gotoARegister);
+
+    // If A-instruction or (C-instruction & dest1==1),
+    // load of A-register=1.
+    // otherwise load of A-register=0;
+    Not(in=instruction[15] ,out=whetherAins);
+    Or(a=whetherAins, b=loadofMux16a ,out=loadofARegister);
+    ARegister(in=gotoARegister ,load=loadofARegister ,out=ARegisterout ,out[0..14]=addressM);
+
+    // D-register
+    // If (C-instruction & dest2==1), ALUoutput goto D-register;
+    // otherwise D-register will not change.
+    And(a=instruction[15] ,b=instruction[4] ,out=loadofDRegister);
+    DRegister(in=ALUoutput ,load=loadofDRegister ,out=DRegisterout);
+
+    // ALU another input: M/A
+    And(a=instruction[15] ,b=instruction[12] ,out=AorM);
+    Mux16(a=ARegisterout ,b=inM ,sel=AorM , out=ALUinput);
+
+    // ALU
+    ALU(x=DRegisterout ,y=ALUinput ,zx=instruction[11] ,nx=instruction[10] ,zy=instruction[9] ,ny=instruction[8] ,f=instruction[7] ,no=instruction[6] ,out=ALUoutput ,out=outM ,zr=zrcontrol ,ng=ngcontrol);
+
+    //PC
+    //whether jump
+    Or(a=ngcontrol ,b=zrcontrol ,out=case1a);
+    Not(in=case1a ,out=case1b);
+    And(a=instruction[15], b=instruction[0] ,out=cinsandj3);
+    And(a=case1b ,b=cinsandj3 ,out=case1); // case1 when (ng=zr=0,j3=1) jump
+
+    And(a=instruction[15] ,b=instruction[1] ,out=cinsandj2);
+    And(a=zrcontrol ,b=cinsandj2 ,out=case2a);
+    Not(in=ngcontrol ,out=case2b);
+    And(a=case2a ,b=case2b ,out=case2); // case2 when (ng=0,zr=j2=1) jump
+    
+    And(a=instruction[15] ,b=instruction[2] ,out=cinsandj1);
+    And(a=ngcontrol ,b=cinsandj1 ,out=case3a);
+    Not(in=zrcontrol ,out=case3b);
+    And(a=case3a ,b=case3b ,out=case3); // case3 when (zr=0,ng=j1=1) jump
+
+    Or(a=case1 ,b=case2 ,out=case1orcase2);
+    Or(a=case1orcase2 ,b=case3 ,out=pcload);
+
+    Not(in=pcload ,out=pcinc);
+
+    PC(in=ARegisterout ,load=pcload ,inc=pcinc ,reset=reset ,out[0..14]=pc);
+
+    And(a=instruction[15] ,b=instruction[3] ,out=writeM);
+}
